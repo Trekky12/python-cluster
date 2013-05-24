@@ -603,88 +603,90 @@ class HierarchicalClustering(BaseClusterMethod):
             level    -  The current level of clustering
             sequence -  The sequence number of the clustering
         """
+        if not self.__cluster_created:
+            if matrix is None:
+                # create level 0, first iteration (sequence)
+                level = 0
+                sequence = 0
+                matrix = []
                 
-        if matrix is None:
-            # create level 0, first iteration (sequence)
-            level = 0
-            sequence = 0
-            matrix = []
+            if self.__linkageMatrix is None:
+                self.__linkageMatrix = []
+                next_cluster_id = len(self._input)
+    
+            # if the matrix only has two rows left, we are done
+            while len(matrix) > 2 or matrix == []:
+    
+                matrix = genmatrix(self._data, self.linkage, True, 0)
+    
+                smallestpair = None
+                mindistance = None
+                rowindex = 0  # keep track of where we are in the matrix
+                # find the minimum distance
+                for row in matrix:
+                    cellindex = 0  # keep track of where we are in the matrix
+                    for cell in row:
+                        # if we are not on the diagonal (which is always 0)
+                        # and if this cell represents a new minimum...
+                        if ((rowindex != cellindex) and
+                            (cell < mindistance or smallestpair is None)):
+                            smallestpair = (rowindex, cellindex)
+                            mindistance = cell
+                        cellindex += 1
+                    rowindex += 1
+    
+                sequence += 1
+                
+    
+               
+                level = matrix[smallestpair[1]][smallestpair[0]]
+                cluster = Cluster(level, next_cluster_id, self._data[smallestpair[0]],
+                        self._data[smallestpair[1]])
+                        
+                
+                # Create linkage Matrix for SciPy
+                #
+                # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html
+                # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
+                #
+                # A 4 by (n-1) matrix Z is returned. At the i-th iteration, clusters with indices Z[i, 0] and Z[i, 1] are combined to form cluster n+1. 
+                # A cluster with an index less than n corresponds to one of the n original observations. 
+                # The distance between clusters Z[i, 0] and Z[i, 1] is given by Z[i, 2]. 
+                # The fourth value Z[i, 3] represents the number of original observations in the newly formed cluster.
+                #
+                # I ignore the fourth value ;-)
+                
+                left = self._data[smallestpair[0]]
+                right = self._data[smallestpair[1]]
+                
+                if isinstance(left, Cluster):
+                    p1 = left.getClusterID()
+                else:
+                    p1 = self._input.index(left)
+                if isinstance(right, Cluster):
+                    p2 = right.getClusterID()
+                else:
+                    p2 = self._input.index(right)
+                
+                self.__linkageMatrix.append([p1, p2, level, 0])
+                next_cluster_id+=1            
             
-        if self.__linkageMatrix is None:
-            self.__linkageMatrix = []
-            next_cluster_id = len(self._input)
-
-        # if the matrix only has two rows left, we are done
-        while len(matrix) > 2 or matrix == []:
-
-            matrix = genmatrix(self._data, self.linkage, True, 0)
-
-            smallestpair = None
-            mindistance = None
-            rowindex = 0  # keep track of where we are in the matrix
-            # find the minimum distance
-            for row in matrix:
-                cellindex = 0  # keep track of where we are in the matrix
-                for cell in row:
-                    # if we are not on the diagonal (which is always 0)
-                    # and if this cell represents a new minimum...
-                    if ((rowindex != cellindex) and
-                        (cell < mindistance or smallestpair is None)):
-                        smallestpair = (rowindex, cellindex)
-                        mindistance = cell
-                    cellindex += 1
-                rowindex += 1
-
-            sequence += 1
-            
-
-           
-            level = matrix[smallestpair[1]][smallestpair[0]]
-            cluster = Cluster(level, next_cluster_id, self._data[smallestpair[0]],
-                    self._data[smallestpair[1]])
-                    
-            
-            # Create linkage Matrix for SciPy
-            # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html
-            # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
-            # A 4 by (n-1) matrix Z is returned. At the i-th iteration, clusters with indices Z[i, 0] and Z[i, 1] are combined to form cluster n+1. 
-            # A cluster with an index less than n corresponds to one of the n original observations. 
-            # The distance between clusters Z[i, 0] and Z[i, 1] is given by Z[i, 2]. 
-            # The fourth value Z[i, 3] represents the number of original observations in the newly formed cluster.
-            
-            # I ignore the fourth value ;-)
-            
-            left = self._data[smallestpair[0]]
-            right = self._data[smallestpair[1]]
-            
-            if isinstance(left, Cluster):
-                p1 = left.getClusterID()
-            else:
-                p1 = self._input.index(left)
-            if isinstance(right, Cluster):
-                p2 = right.getClusterID()
-            else:
-                p2 = self._input.index(right)
-            
-            self.__linkageMatrix.append([p1, p2, level, 0])
-            next_cluster_id+=1            
-        
-            
-            # maintain the data, by combining the the two most similar items
-            # in the list we use the min and max functions to ensure the
-            # integrity of the data.  imagine: if we first remove the item
-            # with the smaller index, all the rest of the items shift down by
-            # one. So the next index will be wrong. We could simply adjust the
-            # value of the second "remove" call, but we don't know the order
-            # in which they come. The max and min approach clarifies that
-            self._data.remove(self._data[max(smallestpair[0],
-                smallestpair[1])])  # remove item 1
-            self._data.remove(self._data[min(smallestpair[0],
-                smallestpair[1])])  # remove item 2
-            self._data.append(cluster)  # append item 1 and 2 combined
-
-        # all the data is in one single cluster. We return that and stop
-        self.__cluster_created = True
+                
+                # maintain the data, by combining the the two most similar items
+                # in the list we use the min and max functions to ensure the
+                # integrity of the data.  imagine: if we first remove the item
+                # with the smaller index, all the rest of the items shift down by
+                # one. So the next index will be wrong. We could simply adjust the
+                # value of the second "remove" call, but we don't know the order
+                # in which they come. The max and min approach clarifies that
+                self._data.remove(self._data[max(smallestpair[0],
+                    smallestpair[1])])  # remove item 1
+                self._data.remove(self._data[min(smallestpair[0],
+                    smallestpair[1])])  # remove item 2
+                self._data.append(cluster)  # append item 1 and 2 combined
+    
+            # all the data is in one single cluster. We return that and stop
+            self.__cluster_created = True
         return
 
     def getlevel(self, threshold):
