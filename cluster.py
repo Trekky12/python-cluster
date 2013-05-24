@@ -184,7 +184,7 @@ class Cluster(object):
     def __str__(self):
         return self.__str__()
 
-    def __init__(self, level, *args):
+    def __init__(self, level, cluster_id, *args):
         """
         Constructor
 
@@ -200,6 +200,7 @@ class Cluster(object):
                     that list as content
         """
         self.__level = level
+        self.__cluster_id = cluster_id
         if len(args) == 0:
             self.__items = []
         else:
@@ -267,6 +268,7 @@ class Cluster(object):
                 item.display(depth + 1)
             else:
                 print depth * "    " + "%s" % item
+            
 
     def topology(self):
         """
@@ -356,7 +358,13 @@ class Cluster(object):
             return [[left]] + right.getlevel(threshold)
         else:
             return [[left], [right]]
-
+            
+            
+    def getClusterID(self):
+            """
+            Returns the ID associated with this cluster
+            """
+            return self.__cluster_id
 
 class BaseClusterMethod:
     """
@@ -443,6 +451,7 @@ class HierarchicalClustering(BaseClusterMethod):
         # set the linkage type to single
         self.set_linkage_method(linkage)
         self.__cluster_created = False
+        self.__linkageMatrix = None
 
     def set_linkage_method(self, method):
         """
@@ -594,12 +603,16 @@ class HierarchicalClustering(BaseClusterMethod):
             level    -  The current level of clustering
             sequence -  The sequence number of the clustering
         """
-
+                
         if matrix is None:
             # create level 0, first iteration (sequence)
             level = 0
             sequence = 0
             matrix = []
+            
+        if self.__linkageMatrix is None:
+            self.__linkageMatrix = []
+            next_cluster_id = len(self._input)
 
         # if the matrix only has two rows left, we are done
         while len(matrix) > 2 or matrix == []:
@@ -623,10 +636,40 @@ class HierarchicalClustering(BaseClusterMethod):
                 rowindex += 1
 
             sequence += 1
-            level = matrix[smallestpair[1]][smallestpair[0]]
-            cluster = Cluster(level, self._data[smallestpair[0]],
-                    self._data[smallestpair[1]])
+            
 
+           
+            level = matrix[smallestpair[1]][smallestpair[0]]
+            cluster = Cluster(level, next_cluster_id, self._data[smallestpair[0]],
+                    self._data[smallestpair[1]])
+                    
+            
+            # Create linkage Matrix for SciPy
+            # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.dendrogram.html
+            # http://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
+            # A 4 by (n-1) matrix Z is returned. At the i-th iteration, clusters with indices Z[i, 0] and Z[i, 1] are combined to form cluster n+1. 
+            # A cluster with an index less than n corresponds to one of the n original observations. 
+            # The distance between clusters Z[i, 0] and Z[i, 1] is given by Z[i, 2]. 
+            # The fourth value Z[i, 3] represents the number of original observations in the newly formed cluster.
+            
+            # I ignore the fourth value ;-)
+            
+            left = self._data[smallestpair[0]]
+            right = self._data[smallestpair[1]]
+            
+            if isinstance(left, Cluster):
+                p1 = left.getClusterID()
+            else:
+                p1 = self._input.index(left)
+            if isinstance(right, Cluster):
+                p2 = right.getClusterID()
+            else:
+                p2 = self._input.index(right)
+            
+            self.__linkageMatrix.append([p1, p2, level, 0])
+            next_cluster_id+=1            
+        
+            
             # maintain the data, by combining the the two most similar items
             # in the list we use the min and max functions to ensure the
             # integrity of the data.  imagine: if we first remove the item
@@ -665,6 +708,19 @@ class HierarchicalClustering(BaseClusterMethod):
             self.cluster()
 
         return self._data[0].getlevel(threshold)
+        
+    def getLinkageMatrix(self):
+        """
+        Returns the Linkage matrix for dendrogram ploting with SciPy
+
+        """
+
+        # initialize the cluster if not yet done
+        if not self.__cluster_created:
+            self.cluster()
+
+        return self.__linkageMatrix
+        
 
 
 class KMeansClustering:
